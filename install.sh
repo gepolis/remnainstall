@@ -278,9 +278,10 @@ COMPOSE
         soft: 1048576
         hard: 1048576
     network_mode: host
+    env_file:
+      - .env
     environment:
       - NODE_PORT=2222
-      - SECRET_KEY=$(echo -e "$CERTIFICATE")
     volumes:
       - /dev/shm:/dev/shm:rw
     logging:
@@ -333,6 +334,8 @@ NGINX
     ufw reload >/dev/null 2>&1
 
     install_random_template
+
+    printf 'SECRET_KEY=%s\n' "$CERTIFICATE" > "$TARGET/.env"
 
     cd "$TARGET"
     docker compose up -d \
