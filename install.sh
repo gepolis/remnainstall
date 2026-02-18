@@ -19,9 +19,13 @@ SCRIPT_VERSION="1.0.0"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
+COLOR_YELLOW="\033[1;33m"
+COLOR_CYAN="\033[1;36m"
 COLOR_RED="\033[1;31m"
 
 error() { echo -e "${COLOR_RED}[ОШИБКА] $*${COLOR_RESET}" >&2; exit 1; }
+step()  { echo -e "${COLOR_CYAN}[>>>] $*${COLOR_RESET}"; }
+ok()    { echo -e "${COLOR_GREEN}[OK]  $*${COLOR_RESET}"; }
 
 # ---------------------------------------------------------------------------
 # Разбор аргументов
@@ -68,38 +72,49 @@ grep -qE "bullseye|bookworm|jammy|noble|trixie" /etc/os-release \
 # ---------------------------------------------------------------------------
 
 install_packages() {
-    apt-get update -y -qq >/dev/null 2>&1 \
+    step "Обновление списка пакетов..."
+    apt-get update -y \
         || error "Не удалось обновить список пакетов"
 
-    apt-get install -y -qq \
+    step "Установка зависимостей..."
+    apt-get install -y \
         ca-certificates curl wget \
         gnupg unzip openssl \
         ufw dnsutils \
         certbot \
-        >/dev/null 2>&1 \
         || error "Не удалось установить пакеты"
+    ok "Зависимости установлены"
 
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh >/dev/null 2>&1 \
+        step "Установка Docker..."
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh \
             || error "Не удалось скачать установщик Docker"
-        sh /tmp/get-docker.sh >/dev/null 2>&1 \
+        sh /tmp/get-docker.sh \
             || error "Ошибка установки Docker"
         rm -f /tmp/get-docker.sh
+        ok "Docker установлен"
+    else
+        ok "Docker уже установлен, пропуск"
     fi
 
-    systemctl start  docker >/dev/null 2>&1
-    systemctl enable docker >/dev/null 2>&1
+    step "Запуск Docker..."
+    systemctl start  docker
+    systemctl enable docker
     docker info >/dev/null 2>&1 || error "Docker не запустился"
+    ok "Docker запущен"
 
+    step "Настройка BBR и sysctl..."
     grep -q "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf \
         || echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
     grep -q "net.core.default_qdisc = fq" /etc/sysctl.conf \
         || echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-    sysctl -p >/dev/null 2>&1
+    sysctl -p
 
-    ufw allow 22/tcp  comment 'SSH'   >/dev/null 2>&1
-    ufw allow 443/tcp comment 'HTTPS' >/dev/null 2>&1
-    ufw --force enable                >/dev/null 2>&1
+    step "Настройка UFW..."
+    ufw allow 22/tcp  comment 'SSH'
+    ufw allow 443/tcp comment 'HTTPS'
+    ufw --force enable
+    ok "UFW настроен"
 }
 
 # ---------------------------------------------------------------------------
@@ -121,6 +136,7 @@ check_certificate_exists() {
 get_certificate_acme() {
     local domain="$1" email="$2"
 
+    step "Получение SSL-сертификата для $domain..."
     ufw allow 80/tcp >/dev/null 2>&1
 
     certbot certonly \
@@ -132,11 +148,11 @@ get_certificate_acme() {
         --http-01-port 80 \
         --key-type ecdsa \
         --elliptic-curve secp384r1 \
-        >/dev/null 2>&1 \
         || error "Не удалось получить сертификат. Убедитесь, что $domain указывает на этот сервер и порт 80 не занят."
 
     ufw delete allow 80/tcp >/dev/null 2>&1
     ufw reload              >/dev/null 2>&1
+    ok "Сертификат получен"
 }
 
 setup_certificates() {
