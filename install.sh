@@ -335,8 +335,8 @@ NGINX
     install_random_template
 
     cd "$TARGET"
-    docker compose up -d >/dev/null 2>&1 \
-        || error "Не удалось запустить контейнеры"
+    docker compose up -d \
+        || { docker compose logs --tail=50; error "Не удалось запустить контейнеры"; }
 
     # Проверка доступности ноды
     local max_attempts=5 attempt=1 delay=15
